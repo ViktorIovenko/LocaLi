@@ -13,6 +13,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.util.Log
 import android.widget.Toast
+import android.os.PowerManager
 
 class MainActivity : ComponentActivity() {
     val isTrainingMode = mutableStateOf(false)
@@ -20,11 +21,10 @@ class MainActivity : ComponentActivity() {
     val internetStatus = mutableStateOf(false)
     var lastUpdateTime = mutableStateOf("N/A")
     private lateinit var locationService: LocationService
+    private lateinit var wakeLock: PowerManager.WakeLock
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        locationService = LocationService(this)
-        checkAndRequestPermissions()
         setContent {
             LocalMeApp(
                 isTrainingMode = isTrainingMode,
@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
                 internetStatus = internetStatus
             )
         }
+        checkAndRequestPermissions()
     }
 
     private fun checkAndRequestPermissions() {
@@ -68,6 +69,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun initializeServices() {
+        acquireWakeLock()
+        locationService = LocationService(this)
         locationService.startLocationUpdates()
         checkGpsStatus()
         checkInternetConnection()
@@ -88,8 +91,26 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun switchMode(isTraining: Boolean) {
+        Log.d("MainActivity", "Switching mode to ${if (isTraining) "training" else "normal"}")
         isTrainingMode.value = isTraining
-        locationService.setMode(isTraining)
+        locationService.updateMode(isTraining)
+    }
+
+    private fun acquireWakeLock() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LocalMeApp::WakeLockTag")
+        wakeLock.acquire()
+    }
+
+    private fun releaseWakeLock() {
+        if (wakeLock.isHeld) {
+            wakeLock.release()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        releaseWakeLock()
     }
 
     companion object {
